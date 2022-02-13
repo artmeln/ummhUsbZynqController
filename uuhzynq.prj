@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="ASCII"?>
+<sdkproject:SdkProject xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:sdkproject="http://www.xilinx.com/sdkproject" name="uuhzynq" location="C:/personal/fpga/Vitis/Workspace2/uuhzynq" platform="C:/personal/fpga/Vitis/Workspace2/design12/export/design12/design12.xpfm" platformUID="xilinx:mys-7z010::0.0(custom)" systemProject="uuhzynq_system" sysConfig="design12" runtime="C/C++" cpu="standalone_domain" cpuInstance="ps7_cortexa9_0" os="standalone" language="CPP" mssSignature="418815b229526406f0f84d8f29327a1d">
+  <configuration name="Debug" id="xilinx.gnu.armv7.exe.debug.606561111">
+    <configBuildOptions xsi:type="sdkproject:SdkOptions"/>
+    <lastBuildOptions xsi:type="sdkproject:SdkOptions"/>
+  </configuration>
+  <configuration name="Release" id="xilinx.gnu.armv7.exe.release.542263162" dirty="true">
+    <configBuildOptions xsi:type="sdkproject:SdkOptions"/>
+  </configuration>
+  <template appTemplateName="empty_application"/>
+</sdkproject:SdkProject>
