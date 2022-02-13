@@ -192,7 +192,7 @@ u32 XUsbPs_Ch9SetupDevDescReply(u8 *BufPtr, u32 BufLen)
 		be2les(0x0100),			/* bcdDevice */
 		0x01,				/* iManufacturer */
 		0x02,				/* iProduct */
-		0x03,				/* iSerialNumber */
+		(u8)SERIAL_NUMBER,				/* iSerialNumber */
 		0x01				/* bNumConfigurations */
 	};
 
