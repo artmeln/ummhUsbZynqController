@@ -13,7 +13,7 @@
 
 using namespace std;
 
-//#define CONTROLLER_DEBUG 1;
+#define CONTROLLER_DEBUG 1;
 
 /************ SD card definitions ************/
 static FATFS FS_instance;			// File System instance
@@ -21,6 +21,26 @@ static FIL file1;					// File instance
 int result;						// FRESULT variable
 static const char *path = "0:/";	//  string pointer to the logical drive number
 char filename[32] = "devices.txt";
+
+/************ Simulated camera image definitions ************/
+u32 const imgWidth = 1*1024;
+u32 const imgHeight = 1*1024;
+u32 roiX=0;
+u32 roiY=0;
+u32 roiW = imgWidth;
+u32 roiH = imgHeight;
+u32 binning = 1;
+u32 exposure = 1;
+u32 const imgSize = imgWidth*imgHeight;
+u16 img[imgSize];		// 16bit version
+u8 bytesPerPixel = 2;	// 16bit version
+
+u32 const CAMERA_TRANSFER_SIZE = 256*512;
+u8* buffImg;
+static u32 sentImgBytes;
+bool sendingImage = false;
+bool isEp2Busy = false;
+u32 posStart = 0;
 
 /*** String constants for communicating with MM adapter ***/
 string devicename;
@@ -105,13 +125,44 @@ void make_and_send_output_command(string devicename, string command, int error, 
 	SendToEp1((u8*)str, strlen(str));
 }
 
+// simulate camera image (16-bit version)
+void simulate_image() {
+	u16 val=0;
+	for (u32 ii=posStart; ii<imgHeight; ii++) {
+		for (u32 jj=0; jj<imgWidth; jj++) {
+			img[ii*imgWidth+jj] = val;
+		}
+		val++;
+	}
+	for (u32 ii=0; ii<posStart; ii++) {
+		for (u32 jj=0; jj<imgWidth; jj++) {
+			img[ii*imgWidth+jj] = val;
+		}
+		val++;
+	}
+	posStart++;
+	if (posStart==imgHeight) posStart=0;
+}
+
+// apply ROI to the simulated image
+void apply_roi() {
+	if (roiX==0 && roiY==0 && roiW==imgWidth && roiH==imgHeight) return;
+	u32 cc=0;
+	for (u32 jj=roiY; jj<roiH; jj++) {
+		for (u32 ii=roiX; ii<roiW; ii++) {
+			img[cc] = img[jj*roiW+roiX];
+			cc++;
+		}
+	}
+}
+
 
 int main(void)
 {
 	int Status;
 
 	// initialize usb2
-	Status = SetupUsbDevice();
+	Status = SetupUsbDevice(&isEp2Busy);
 	if (Status != XST_SUCCESS) {
 		#ifdef CONTROLLER_DEBUG
 			xil_printf("Failed to setup USB2.\r\n");
@@ -282,6 +333,88 @@ int main(void)
 	        				make_and_send_output_command(devicename,command,uuherrors::ctr_device_command_not_recognized,emptyvs);
 	        			}
 	        		}
+        			else if (strcmp(devicename.c_str(),"Camera-A")==0) {
+        				if (strcmp(command.c_str(),"SI")==0) {
+        					//vals.clear();
+        					//vals.push_back(to_string(exposure+1000));
+        					//make_and_send_output_command(devicename,uuhwords::timeout,1,vals);
+        					simulate_image();
+        					apply_roi();
+        					//apply_binning();
+        					//usleep(exposure*1000);
+        					make_and_send_output_command(devicename,command,0,vals);
+        					//vals.clear();
+        					//vals.push_back(to_string(1000));
+        					//make_and_send_output_command(devicename,uuhwords::timeout,1,vals);
+        				} else if (strcmp(command.c_str(),"GIB")==0) {
+        					buffImg = (u8*)img;
+        					sentImgBytes = 0;
+        					sendingImage = true;
+        					// no response is sent here
+        					// but image transfer will begin
+        					while (sentImgBytes<(roiW)*(roiH)*bytesPerPixel) {
+        						isEp2Busy = true;
+        						SendToEp2(buffImg, CAMERA_TRANSFER_SIZE);
+        						while (isEp2Busy) {usleep(10);} // will be reset by interrupt handler
+        						sentImgBytes += CAMERA_TRANSFER_SIZE;
+        						buffImg += CAMERA_TRANSFER_SIZE;
+        					//} else {
+        						// finished sending the image
+        						//sendingImage = false;
+        					}
+        				} else if (strcmp(command.c_str(),"DN")==0) {
+        					sleep(2);
+        					make_and_send_output_command(devicename,command,0,vals);
+        				} else if (strcmp(command.c_str(),"EX")==0) {
+        					u32 newExposure = atoi(vals.at(0).c_str());
+        					if (newExposure<1 || newExposure>10000) newExposure = exposure;
+        					exposure = newExposure;
+    						vals.clear();
+    						itoa(exposure,c_str,10);
+    						vals.push_back(string(c_str));
+        					make_and_send_output_command(devicename,command,0,vals);
+        				} else if (strcmp(command.c_str(),"SB")==0) {
+        					u32 newBinning = atoi(vals.at(0).c_str());
+        					if (newBinning<=0 || newBinning>4) newBinning = binning;
+		        			roiX = (roiX*binning)/newBinning;
+		        			roiY = (roiY*binning)/newBinning;
+        					roiW = (roiW*binning)/newBinning;
+        					roiH = (roiH*binning)/newBinning;
+        					binning = newBinning;
+    						vals.clear();
+    						itoa(binning,c_str,10);
+    						vals.push_back(string(c_str));
+        					make_and_send_output_command(devicename,command,0,vals);
+        				} else if (strcmp(command.c_str(),"SR")==0) {
+        					roiX = atoi(vals.at(0).c_str());
+        					roiY = atoi(vals.at(1).c_str());
+        					roiW = atoi(vals.at(2).c_str());
+        					roiH = atoi(vals.at(3).c_str());
+        					if (roiW<=0 || roiW>imgWidth/binning ||
+        						roiH<=0 || roiH>imgHeight/binning ||
+								roiX<0 || roiX>imgWidth/binning || (roiX+roiW)>imgWidth/binning ||
+								roiY<0 || roiY>imgHeight/binning || (roiY+roiH)>imgHeight/binning) {
+        						roiX=0;
+        						roiY=0;
+        						roiW = imgWidth/binning;
+        						roiH = imgHeight/binning;
+        					}
+    						vals.clear();
+    						itoa(roiX,c_str,10);
+    						vals.push_back(string(c_str));
+    						itoa(roiY,c_str,10);
+    						vals.push_back(string(c_str));
+    						itoa(roiW,c_str,10);
+    						vals.push_back(string(c_str));
+    						itoa(roiH,c_str,10);
+    						vals.push_back(string(c_str));
+        					make_and_send_output_command(devicename,command,0,vals);
+        				} else if (strcmp(command.c_str(),"CR")==0) {
+        					make_and_send_output_command(devicename,command,0,vals);
+        				} else {
+        					make_and_send_output_command(devicename,command,uuherrors::ctr_device_command_not_recognized,emptyvs);
+        				}
+        			}
 	        		else {
 	        			make_and_send_output_command(devicename,command,uuherrors::ctr_device_not_recognized,emptyvs);
 	        		}
@@ -292,6 +425,19 @@ int main(void)
 	        	}
 	        }
 	    }
+		// continue sending camera image
+    	/*if (sendingImage) {
+			if (sentImgBytes<(roiW)*(roiH)*bytesPerPixel) {
+				isEp2Busy = true;
+				SendToEp2(buffImg, CAMERA_TRANSFER_SIZE);
+				while (isEp2Busy) {usleep(10);} // will be reset by interrupt handler
+				sentImgBytes += CAMERA_TRANSFER_SIZE;
+				buffImg += CAMERA_TRANSFER_SIZE;
+			} else {
+				// finished sending the image
+				sendingImage = false;
+			}
+    	}*/
 	}
 
 	return XST_SUCCESS;

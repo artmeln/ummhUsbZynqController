@@ -54,9 +54,10 @@ u8 RxLengthEp2;
 /************************** Function Prototypes ******************************/
 
 static int UsbIntrExample(XScuGic *IntcInstancePtr, XUsbPs *UsbInstancePtr,
-			  u16 UsbDeviceId, u16 UsbIntrId);
+			  u16 UsbDeviceId, u16 UsbIntrId, bool* pIsEp2Busy);
 
 static void UsbIntrHandler(void *CallBackRef, u32 Mask);
+static void UsbIntrHandlerTransferComplete(void *CallBackRef, u32 Mask);
 static void XUsbPs_Ep0EventHandler(void *CallBackRef, u8 EpNum,
 					u8 EventType, void *Data);
 static void XUsbPs_Ep1EventHandler(void *CallBackRef, u8 EpNum,
@@ -81,9 +82,9 @@ static volatile int NumReceivedFrames = 0;
 /******************************************************************************/
 // 	Functions that allow access to Rx buffers and to Usb device setup
 /*****************************************************************************/
-int SetupUsbDevice() {
+int SetupUsbDevice(bool* pIsEp2Busy) {
 	return UsbIntrExample(&IntcInstance, &UsbInstance,
-			XPAR_XUSBPS_0_DEVICE_ID, XPAR_XUSBPS_0_INTR);
+			XPAR_XUSBPS_0_DEVICE_ID, XPAR_XUSBPS_0_INTR, pIsEp2Busy);
 }
 
 void ReadFromEp1(u8** pBuffer, u8* length) {
@@ -108,7 +109,7 @@ int SendToEp1(u8* buff, u8 length) {
 	return XUsbPs_EpBufferSend(&UsbInstance, 1, buff, length);
 }
 
-int SendToEp2(u8* buff, u8 length) {
+int SendToEp2(u8* buff, u32 length) {
 	return XUsbPs_EpBufferSend(&UsbInstance, 2, buff, length);
 }
 
@@ -134,7 +135,7 @@ int SendToEp2(u8* buff, u8 length) {
  *
  ******************************************************************************/
 static int UsbIntrExample(XScuGic *IntcInstancePtr, XUsbPs *UsbInstancePtr,
-					u16 UsbDeviceId, u16 UsbIntrId)
+					u16 UsbDeviceId, u16 UsbIntrId, bool* pIsEp2Busy)
 {
 	int	Status;
 	u8	*MemPtr = NULL;
@@ -256,6 +257,13 @@ static int UsbIntrExample(XScuGic *IntcInstancePtr, XUsbPs *UsbInstancePtr,
 	if (XST_SUCCESS != Status) {
 		goto out;
 	}
+	/* Set the handler for transfer completion. */
+	Status = XUsbPs_IntrSetHandler(UsbInstancePtr, UsbIntrHandlerTransferComplete, pIsEp2Busy,
+			XUSBPS_IXR_UI_MASK);
+	if (XST_SUCCESS != Status) {
+		goto out;
+	}
+
 
 	/* Set the handler for handling endpoint 0 events. This is where we
 	 * will receive and handle the Setup packet from the host.
@@ -333,6 +341,14 @@ out:
 static void UsbIntrHandler(void *CallBackRef, u32 Mask)
 {
 	NumIrqs++;
+}
+
+
+static void UsbIntrHandlerTransferComplete(void *CallBackRef, u32 Mask)
+{
+	if (*(bool*)CallBackRef) {
+		*(bool*)CallBackRef = false;
+	}
 }
 
 
