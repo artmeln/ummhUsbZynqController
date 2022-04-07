@@ -1,10 +1,12 @@
-
 #include <string>
 #include <vector>
+#include <math.h>
+#include "xtime_l.h"
 
 #include "xusbps_IniRxTx.h"
 
 #include "uuhreserved.h"
+
 
 // SD card
 #include "xsdps.h"
@@ -13,7 +15,7 @@
 
 using namespace std;
 
-#define CONTROLLER_DEBUG 1;
+#define CONTROLLER_DEBUG 1
 
 /************ SD card definitions ************/
 static FATFS FS_instance;			// File System instance
@@ -23,24 +25,23 @@ static const char *path = "0:/";	//  string pointer to the logical drive number
 char filename[32] = "devices.txt";
 
 /************ Simulated camera image definitions ************/
-u32 const imgWidth = 1*1024;
-u32 const imgHeight = 1*1024;
+u32 const imgWidth = 5*1024;
+u32 const imgHeight = 3*1024;
 u32 roiX=0;
 u32 roiY=0;
 u32 roiW = imgWidth;
 u32 roiH = imgHeight;
 u32 binning = 1;
 u32 exposure = 1;
-u32 const imgSize = imgWidth*imgHeight;
+u32 const imgSize = imgWidth*imgHeight; // must be multiples of CAMERA_TRANSFER_SIZE
 u16 img[imgSize];		// 16bit version
 u8 bytesPerPixel = 2;	// 16bit version
 
-u32 const CAMERA_TRANSFER_SIZE = 256*512;
+u32 CAMERA_TRANSFER_SIZE = 256*512;
 u8* buffImg;
 static u32 sentImgBytes;
 bool sendingImage = false;
-bool isEp2Busy = false;
-u32 posStart = 0;
+u8 txEventCounterEp2=0;
 
 /*** String constants for communicating with MM adapter ***/
 string devicename;
@@ -126,7 +127,7 @@ void make_and_send_output_command(string devicename, string command, int error, 
 }
 
 // simulate camera image (16-bit version)
-void simulate_image() {
+/*void simulate_image() {
 	u16 val=0;
 	for (u32 ii=posStart; ii<imgHeight; ii++) {
 		for (u32 jj=0; jj<imgWidth; jj++) {
@@ -142,17 +143,48 @@ void simulate_image() {
 	}
 	posStart++;
 	if (posStart==imgHeight) posStart=0;
+} */
+
+// simulate camera image (16-bit version)
+void simulate_image() {
+	XTime curTime;
+	XTime_GetTime(&curTime);
+
+	int rho = imgHeight / 4;
+	double phi = (2*M_PI*curTime)/0xFFFFFFFF;
+	long xc = imgWidth/2 + lround(rho*cos(phi));
+	long yc = imgHeight/2 + lround(rho*sin(phi));
+
+	memset(img,0,imgSize*2);
+	double val=0;
+	for (int hh=yc-25; hh<yc+25; hh++) {
+		for (int ww=xc-25; ww<xc+25; ww++) {
+			val = ((ww-xc)*(ww-xc)+(hh-yc)*(hh-yc))/(imgHeight/16.0)/(imgHeight/16.0)/2.0;
+			val = exp(-val);
+			img[hh*imgWidth+ww] = round(65535*val);
+		}
+	}
+
+/*	double val=0;
+	for (u32 hh=0; hh<imgHeight; hh++) {
+		for (u32 ww=0; ww<imgWidth; ww++) {
+			val = ((ww-xc)*(ww-xc)+(hh-yc)*(hh-yc))/(imgHeight/8.0)/(imgHeight/8.0)/2.0;
+			if (ww==imgWidth/2 && hh==imgHeight/2) xil_printf("%d\r\n",val);
+			val = exp(-val);
+			img[hh*imgWidth+ww] = round(65535*val);
+		}
+	}
+	*/
 }
 
 // apply ROI to the simulated image
 void apply_roi() {
 	if (roiX==0 && roiY==0 && roiW==imgWidth && roiH==imgHeight) return;
-	u32 cc=0;
+	u16* imgTemp;
+	imgTemp = img;
 	for (u32 jj=roiY; jj<roiH; jj++) {
-		for (u32 ii=roiX; ii<roiW; ii++) {
-			img[cc] = img[jj*roiW+roiX];
-			cc++;
-		}
+		memcpy(imgTemp,img+jj*imgWidth+roiX,roiW*bytesPerPixel);
+		imgTemp += roiW*bytesPerPixel;
 	}
 }
 
@@ -162,7 +194,7 @@ int main(void)
 	int Status;
 
 	// initialize usb2
-	Status = SetupUsbDevice(&isEp2Busy);
+	Status = SetupUsbDevice(&txEventCounterEp2);
 	if (Status != XST_SUCCESS) {
 		#ifdef CONTROLLER_DEBUG
 			xil_printf("Failed to setup USB2.\r\n");
@@ -335,33 +367,19 @@ int main(void)
 	        		}
         			else if (strcmp(devicename.c_str(),"Camera-A")==0) {
         				if (strcmp(command.c_str(),"SI")==0) {
-        					//vals.clear();
-        					//vals.push_back(to_string(exposure+1000));
-        					//make_and_send_output_command(devicename,uuhwords::timeout,1,vals);
         					simulate_image();
-        					apply_roi();
+        					//apply_roi();
         					//apply_binning();
         					//usleep(exposure*1000);
         					make_and_send_output_command(devicename,command,0,vals);
-        					//vals.clear();
-        					//vals.push_back(to_string(1000));
-        					//make_and_send_output_command(devicename,uuhwords::timeout,1,vals);
         				} else if (strcmp(command.c_str(),"GIB")==0) {
         					buffImg = (u8*)img;
         					sentImgBytes = 0;
         					sendingImage = true;
-        					// no response is sent here
-        					// but image transfer will begin
-        					while (sentImgBytes<(roiW)*(roiH)*bytesPerPixel) {
-        						isEp2Busy = true;
-        						SendToEp2(buffImg, CAMERA_TRANSFER_SIZE);
-        						while (isEp2Busy) {usleep(10);} // will be reset by interrupt handler
-        						sentImgBytes += CAMERA_TRANSFER_SIZE;
-        						buffImg += CAMERA_TRANSFER_SIZE;
-        					//} else {
-        						// finished sending the image
-        						//sendingImage = false;
-        					}
+        					// no response is sent here but
+        					// image transfer will begin after
+        					// input command has been processed
+        					// (see usage of sendingImage flag)
         				} else if (strcmp(command.c_str(),"DN")==0) {
         					sleep(2);
         					make_and_send_output_command(devicename,command,0,vals);
@@ -411,6 +429,11 @@ int main(void)
         					make_and_send_output_command(devicename,command,0,vals);
         				} else if (strcmp(command.c_str(),"CR")==0) {
         					make_and_send_output_command(devicename,command,0,vals);
+        				} else if (strcmp(command.c_str(),"TT")==0) {
+        					make_and_send_output_command(devicename,command,0,vals);
+        				} else if (strcmp(command.c_str(),"TS")==0) {
+        					CAMERA_TRANSFER_SIZE = atoi(vals.at(0).c_str());
+        					make_and_send_output_command(devicename,command,0,vals);
         				} else {
         					make_and_send_output_command(devicename,command,uuherrors::ctr_device_command_not_recognized,emptyvs);
         				}
@@ -426,18 +449,24 @@ int main(void)
 	        }
 	    }
 		// continue sending camera image
-    	/*if (sendingImage) {
-			if (sentImgBytes<(roiW)*(roiH)*bytesPerPixel) {
-				isEp2Busy = true;
-				SendToEp2(buffImg, CAMERA_TRANSFER_SIZE);
-				while (isEp2Busy) {usleep(10);} // will be reset by interrupt handler
-				sentImgBytes += CAMERA_TRANSFER_SIZE;
-				buffImg += CAMERA_TRANSFER_SIZE;
-			} else {
-				// finished sending the image
-				sendingImage = false;
-			}
-    	}*/
+    	 if (sendingImage) {
+    		 int transferSize;
+    		 if (sentImgBytes<roiW*roiH*bytesPerPixel) {
+    			 if (roiW*roiH*bytesPerPixel-sentImgBytes>CAMERA_TRANSFER_SIZE) {
+    				 transferSize = CAMERA_TRANSFER_SIZE;
+    			 } else {
+    				 transferSize = roiW*roiH*bytesPerPixel-sentImgBytes;
+    			 }
+    			 txEventCounterEp2 = 0;
+    			 SendToEp2(buffImg, transferSize);
+    			 while (txEventCounterEp2<(transferSize+16*1024-1)/(16*1024)) {usleep(10);} // will be reset by interrupt
+    			 sentImgBytes += transferSize;
+    			 buffImg += transferSize;
+    		 } else {
+    			 // finished sending the image
+    			 sendingImage = false;
+    		 }
+    	 }
 	}
 
 	return XST_SUCCESS;
