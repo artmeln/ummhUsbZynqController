@@ -53,7 +53,8 @@ u8 RxLengthEp1;
 /************************** Function Prototypes ******************************/
 
 static int UsbIntrExample(XScuGic *IntcInstancePtr, XUsbPs *UsbInstancePtr,
-			  u16 UsbDeviceId, u16 UsbIntrId, u8* pTtxEventCounterEp2);
+			  u16 UsbDeviceId, u16 UsbIntrId,
+			  u8* pTxEventCounterEp2, u8* pTxEventCounterEp3);
 
 static void UsbIntrHandler(void *CallBackRef, u32 Mask);
 static void XUsbPs_Ep0EventHandler(void *CallBackRef, u8 EpNum,
@@ -61,6 +62,8 @@ static void XUsbPs_Ep0EventHandler(void *CallBackRef, u8 EpNum,
 static void XUsbPs_Ep1EventHandlerOut(void *CallBackRef, u8 EpNum,
 					u8 EventType, void *Data);
 static void XUsbPs_Ep2EventHandlerIn(void *CallBackRef, u8 EpNum,
+					u8 EventType, void *Data);
+static void XUsbPs_Ep3EventHandlerIn(void *CallBackRef, u8 EpNum,
 					u8 EventType, void *Data);
 static int UsbSetupIntrSystem(XScuGic *IntcInstancePtr,
 			      XUsbPs *UsbInstancePtr, u16 UsbIntrId);
@@ -80,9 +83,10 @@ static volatile int NumReceivedFrames = 0;
 /******************************************************************************/
 // 	Functions that allow access to Rx buffers and to Usb device setup
 /*****************************************************************************/
-int SetupUsbDevice(u8* pTtxEventCounterEp2) {
+int SetupUsbDevice(u8* pTxEventCounterEp2, u8* pTxEventCounterEp3) {
 	return UsbIntrExample(&IntcInstance, &UsbInstance,
-			XPAR_XUSBPS_0_DEVICE_ID, XPAR_XUSBPS_0_INTR, pTtxEventCounterEp2);
+			XPAR_XUSBPS_0_DEVICE_ID, XPAR_XUSBPS_0_INTR,
+			pTxEventCounterEp2, pTxEventCounterEp3);
 }
 
 void ReadFromEp1(u8** pBuffer, u8* length) {
@@ -100,6 +104,10 @@ int SendToEp1(u8* buff, u8 length) {
 
 int SendToEp2(u8* buff, u32 length) {
 	return XUsbPs_EpBufferSend(&UsbInstance, 2, buff, length);
+}
+
+int SendToEp3(u8* buff, u32 length) {
+	return XUsbPs_EpBufferSend(&UsbInstance, 3, buff, length);
 }
 
 /*****************************************************************************/
@@ -124,18 +132,20 @@ int SendToEp2(u8* buff, u32 length) {
  *
  ******************************************************************************/
 static int UsbIntrExample(XScuGic *IntcInstancePtr, XUsbPs *UsbInstancePtr,
-					u16 UsbDeviceId, u16 UsbIntrId, u8* pTtxEventCounterEp2)
+					u16 UsbDeviceId, u16 UsbIntrId,
+					u8* pTxEventCounterEp2, u8* pTxEventCounterEp3)
 {
 	int	Status;
 	u8	*MemPtr = NULL;
 	int	ReturnStatus = XST_FAILURE;
 
-	/* For this example we only configure 3 endpoints:
+	/* For this example we configure 4 endpoints:
 	 *   Endpoint 0 (default control endpoint)
 	 *   Endpoint 1 (BULK data endpoint)
 	 *   Endpoint 2 (BULK data endpoint)
+	 *   Endpoint 3 (BULK data endpoint)
 	 */
-	const u8 NumEndpoints = 3;
+	const u8 NumEndpoints = 4;
 
 	XUsbPs_Config		*UsbConfigPtr;
 	XUsbPs_DeviceConfig	DeviceConfig;
@@ -192,7 +202,7 @@ static int UsbIntrExample(XScuGic *IntcInstancePtr, XUsbPs *UsbInstancePtr,
 	 */
 
 	/*
-	 * For this example we only configure Endpoints 0, 1, and 2.
+	 * For this example we configure Endpoints 0, 1, 2, and 3.
 	 *
 	 * Bufsize = 0 indicates that there is no buffer allocated for OUT
 	 * (receive) endpoint 0. Endpoint 0 is a control endpoint and we only
@@ -224,6 +234,14 @@ static int UsbIntrExample(XScuGic *IntcInstancePtr, XUsbPs *UsbInstancePtr,
 	DeviceConfig.EpCfg[2].In.NumBufs	= 16;
 	DeviceConfig.EpCfg[2].In.MaxPacketSize	= 512;
 
+	DeviceConfig.EpCfg[3].Out.Type		= XUSBPS_EP_TYPE_BULK;
+	DeviceConfig.EpCfg[3].Out.NumBufs	= 16;
+	DeviceConfig.EpCfg[3].Out.BufSize	= 512;
+	DeviceConfig.EpCfg[3].Out.MaxPacketSize	= 512;
+	DeviceConfig.EpCfg[3].In.Type		= XUSBPS_EP_TYPE_BULK;
+	DeviceConfig.EpCfg[3].In.NumBufs	= 16;
+	DeviceConfig.EpCfg[3].In.MaxPacketSize	= 512;
+
 	DeviceConfig.NumEndpoints = NumEndpoints;
 
 	MemPtr = (u8 *)&Buffer[0];
@@ -254,9 +272,9 @@ static int UsbIntrExample(XScuGic *IntcInstancePtr, XUsbPs *UsbInstancePtr,
 				XUSBPS_EP_DIRECTION_OUT,
 				XUsbPs_Ep0EventHandler, UsbInstancePtr);
 
-	/* Set the handler for handling endpoint 1 and 2 events.
+	/* Set the handler for handling endpoint 1, 2, and 3 events.
 	 * A handler is set for for TX complete event on Ep1
-	 * and Rx complete event on Ep2
+	 * and Rx complete event on Ep2 and Ep3
 	 */
 	Status = XUsbPs_EpSetHandler(UsbInstancePtr, 1,
 				XUSBPS_EP_DIRECTION_OUT,
@@ -264,7 +282,11 @@ static int UsbIntrExample(XScuGic *IntcInstancePtr, XUsbPs *UsbInstancePtr,
 
 	Status = XUsbPs_EpSetHandler(UsbInstancePtr, 2,
 				XUSBPS_EP_DIRECTION_IN,
-				XUsbPs_Ep2EventHandlerIn, pTtxEventCounterEp2);
+				XUsbPs_Ep2EventHandlerIn, pTxEventCounterEp2);
+
+	Status = XUsbPs_EpSetHandler(UsbInstancePtr, 3,
+				XUSBPS_EP_DIRECTION_IN,
+				XUsbPs_Ep3EventHandlerIn, pTxEventCounterEp3);
 
 	/* Enable the interrupts. */
 	XUsbPs_IntrEnable(UsbInstancePtr, XUSBPS_IXR_UR_MASK |
@@ -455,6 +477,20 @@ static void XUsbPs_Ep2EventHandlerIn(void *CallBackRef, u8 EpNum,
 	switch (EventType) {
 	case XUSBPS_EP_EVENT_DATA_TX:
 		// increment counter of Ep2 TX events
+		*(u8*)CallBackRef += 1;
+		break;
+	default:
+		/* Unhandled event. Ignore. */
+		break;
+	}
+}
+
+static void XUsbPs_Ep3EventHandlerIn(void *CallBackRef, u8 EpNum,
+					u8 EventType, void *Data)
+{
+	switch (EventType) {
+	case XUSBPS_EP_EVENT_DATA_TX:
+		// increment counter of Ep3 TX events
 		*(u8*)CallBackRef += 1;
 		break;
 	default:
