@@ -1,11 +1,11 @@
 #pragma once
 
-namespace uuhflags {
+namespace ummhflags {
 	const char serial_out = 0;
 	const char serial_in = 1;
 }
 
-namespace uuhwords {
+namespace ummhwords {
 	const char sepSetup = '|';
 	const char sepOut = '>';
 	const char sepIn = '<';
@@ -44,14 +44,13 @@ namespace uuhwords {
 	const char* const set_roi = "SetROI";
 	const char* const get_roi = "GetROI";
 	const char* const clear_roi = "ClearROI";
-	const char* const roi_x = "RoiX";
-	const char* const roi_y = "RoiY";
-	const char* const roi_width = "RoiWidth";
-	const char* const roi_height = "RoiHeight";
 	const char* const pixel_type_8bit = "8bit";
 	const char* const pixel_type_16bit = "16bit";
 	const char* const bit_depth = "BitDepth";
-	const char* const transfer_size = "TransferSize";
+	const char* const image_max_width = "ImageMaxWidth";
+	const char* const image_max_height = "ImageMaxHeight";
+	const char* const transfer_timeout = "TransferTimeout";
+	const char* const endpoint = "Endpoint";
 
 	const char* const prop = "Property";
 	const char* const act = "Action";
@@ -65,7 +64,7 @@ namespace uuhwords {
 
 }
 
-namespace uuherrors {
+namespace ummherrors {
 	
 	// *** errors generated in the adapter ***
 	// unable to connect to the controller
@@ -88,7 +87,7 @@ namespace uuherrors {
 	const int ctr_ok = 0;
 	// busy status for the device specified by the controller
 	const int ctr_busy = 1;
-	// adapter sent a string that controller cannot parse
+	// adapter sent a string that controller is unable to parse
 	const int ctr_string_not_recognized = 500;
 	// adapter specified a device that controller does not recognize
 	const int ctr_device_not_recognized = 501;

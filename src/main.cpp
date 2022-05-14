@@ -5,7 +5,7 @@
 
 #include "xusbps_IniRxTx.h"
 
-#include "uuhreserved.h"
+#include "ummhreserved.h"
 
 
 // SD card
@@ -131,15 +131,15 @@ vector<string> SplitStringIntoWords(std::string line, char sep)
 }
 
 void make_and_send_output_command(string devicename, string command, int error, vector<string> values) {
-	devicename.push_back(uuhwords::sepIn);
+	devicename.push_back(ummhwords::sepIn);
 	devicename.append(command);
-	devicename.push_back(uuhwords::sepIn);
+	devicename.push_back(ummhwords::sepIn);
 	devicename.append(to_string(error));
 	for (size_t cc=0; cc<values.size(); cc++) {
-		devicename.push_back(uuhwords::sepWithin);
+		devicename.push_back(ummhwords::sepWithin);
 		devicename.append(values.at(cc));
 	}
-	devicename.push_back(uuhwords::sepEnd);
+	devicename.push_back(ummhwords::sepEnd);
 	char str[64];
 	strcpy(str,devicename.c_str());
 	#ifdef CONTROLLER_DEBUG
@@ -341,11 +341,11 @@ int main(void)
 			// process the incoming command
 	    	str = string((char*)rxBuffEp1);
 	    	ResetRxBufferEp1();
-	    	str = str.substr(0,str.find_first_of(uuhwords::sepEnd,0));
+	    	str = str.substr(0,str.find_first_of(ummhwords::sepEnd,0));
 
 	    	if (str.size()>0) {
 	    		// handle special one-word commands first
-	        	if (strcmp(str.c_str(),uuhwords::device_list_start)==0) {
+	        	if (strcmp(str.c_str(),ummhwords::device_list_start)==0) {
 	        		// start passing device descriptions
 	        		Status = f_open(&file1, filename, FA_READ);
 	        		Status = read_c_str_from_sd(&file1,c_str);
@@ -356,7 +356,7 @@ int main(void)
 					#endif
 	        		SendToEp1((u8*)c_str, strlen(c_str));
 	        		continue;
-	        	} else if (strcmp(str.c_str(),uuhwords::device_list_continue)==0) {
+	        	} else if (strcmp(str.c_str(),ummhwords::device_list_continue)==0) {
 	        		result = read_c_str_from_sd(&file1,c_str);
 					#ifdef CONTROLLER_DEBUG
 	        			xil_printf("Sending string (Ep1):\r\n");
@@ -364,15 +364,15 @@ int main(void)
 	        			xil_printf("\r\n");
 					#endif
 	        		SendToEp1((u8*)c_str, strlen(c_str));
-	        		if (strcmp(c_str,uuhwords::device_list_end)==0) f_close(&file1);
+	        		if (strcmp(c_str,ummhwords::device_list_end)==0) f_close(&file1);
 	        		continue;
 	        	}
 	        	// handle regular commands
-	        	words = SplitStringIntoWords(str,uuhwords::sepOut);
+	        	words = SplitStringIntoWords(str,ummhwords::sepOut);
 	        	if (words.size()==3) {
 	        		devicename = words[0];
 	        		command = words[1];
-	        		vals = SplitStringIntoWords(words[2],uuhwords::sepWithin);
+	        		vals = SplitStringIntoWords(words[2],ummhwords::sepWithin);
 	        		if (strcmp(devicename.c_str(),"Shutter-A")==0) {
 	    				if (strcmp(command.c_str(),"SO")==0) {
 	    					if (strcmp(vals[0].c_str(),"0")==0) {
@@ -396,12 +396,12 @@ int main(void)
 	        				vector<string> inivals = vals;
 	    					vals.clear();
 	    					vals.push_back(to_string(2500));
-	        				make_and_send_output_command(devicename,uuhwords::timeout,1,vals);
+	        				make_and_send_output_command(devicename,ummhwords::timeout,1,vals);
 	        				sleep(2);
 	        				make_and_send_output_command(devicename,command,0,inivals);
 	    					vals.clear();
 	    					vals.push_back(to_string(1000));
-	        				make_and_send_output_command(devicename,uuhwords::timeout,0,vals);
+	        				make_and_send_output_command(devicename,ummhwords::timeout,0,vals);
 	        			} else if (strcmp(command.c_str(),"RB0.1")==0) {
 	        				float v = atof(vals[0].c_str());
 	        				v = v - 0.1;
@@ -428,14 +428,14 @@ int main(void)
 	        			} else if (strcmp(command.c_str(),"SBNR")==0) {
 	        				make_and_send_output_command(devicename,command,1,vals);
 	        			} else {
-	        				make_and_send_output_command(devicename,command,uuherrors::ctr_device_command_not_recognized,emptyvs);
+	        				make_and_send_output_command(devicename,command,ummherrors::ctr_device_command_not_recognized,emptyvs);
 	        			}
 	        		}
 	        		else if (strcmp(devicename.c_str(),"State-A")==0) {
 	    				if (strcmp(command.c_str(),"SST")==0) {
 							make_and_send_output_command(devicename,command,0,vals);
 	        			} else {
-	        				make_and_send_output_command(devicename,command,uuherrors::ctr_device_command_not_recognized,emptyvs);
+	        				make_and_send_output_command(devicename,command,ummherrors::ctr_device_command_not_recognized,emptyvs);
 	        			}
 	        		}
 	        		else if (strcmp(devicename.c_str(),"Stage-A")==0) {
@@ -452,7 +452,7 @@ int main(void)
 	        			} else if (strcmp(command.c_str(),"MD")==0) {
 							make_and_send_output_command(devicename,command,0,vals);
 	        			} else {
-	        				make_and_send_output_command(devicename,command,uuherrors::ctr_device_command_not_recognized,emptyvs);
+	        				make_and_send_output_command(devicename,command,ummherrors::ctr_device_command_not_recognized,emptyvs);
 	        			}
 	        		}
 	        		else if (strcmp(devicename.c_str(),"XYStage-A")==0) {
@@ -471,7 +471,7 @@ int main(void)
 	        			} else if (strcmp(command.c_str(),"MD")==0) {
 							make_and_send_output_command(devicename,command,0,vals);
 	        			} else {
-	        				make_and_send_output_command(devicename,command,uuherrors::ctr_device_command_not_recognized,emptyvs);
+	        				make_and_send_output_command(devicename,command,ummherrors::ctr_device_command_not_recognized,emptyvs);
 	        			}
 	        		}
         			else if (strcmp(devicename.c_str(),"Camera-A")==0) {
@@ -501,7 +501,7 @@ int main(void)
         					make_and_send_output_command(devicename,command,0,vals);
         				} else if (strcmp(command.c_str(),"SB")==0) {
         					if (sendingImage) {
-        						make_and_send_output_command(devicename,command,uuherrors::ctr_busy,emptyvs);
+        						make_and_send_output_command(devicename,command,ummherrors::ctr_busy,emptyvs);
         					}
         					u32 newBinning = atoi(vals.at(0).c_str());
         					if (newBinning<=0 || newBinning>4) newBinning = binning;
@@ -527,7 +527,7 @@ int main(void)
         					make_and_send_output_command(devicename,"SR",0,vals);
         				} else if (strcmp(command.c_str(),"SR")==0) {
         					if (sendingImage) {
-        						make_and_send_output_command(devicename,command,uuherrors::ctr_busy,emptyvs);
+        						make_and_send_output_command(devicename,command,ummherrors::ctr_busy,emptyvs);
         					}
         					roiX = atoi(vals.at(0).c_str());
         					roiY = atoi(vals.at(1).c_str());
@@ -557,7 +557,7 @@ int main(void)
         				} else if (strcmp(command.c_str(),"TT")==0) {
         					make_and_send_output_command(devicename,command,0,vals);
         				} else {
-        					make_and_send_output_command(devicename,command,uuherrors::ctr_device_command_not_recognized,emptyvs);
+        					make_and_send_output_command(devicename,command,ummherrors::ctr_device_command_not_recognized,emptyvs);
         				}
         			}
         			else if (strcmp(devicename.c_str(),"Camera-B")==0) {
@@ -588,7 +588,7 @@ int main(void)
         					make_and_send_output_command(devicename,command,0,vals);
         				} else if (strcmp(command.c_str(),"SB")==0) {
         					if (sendingImage_B) {
-        						make_and_send_output_command(devicename,command,uuherrors::ctr_busy,emptyvs);
+        						make_and_send_output_command(devicename,command,ummherrors::ctr_busy,emptyvs);
         					}
         					u32 newBinning = atoi(vals.at(0).c_str());
         					if (newBinning<=0 || newBinning>4) newBinning = binning_B;
@@ -614,7 +614,7 @@ int main(void)
         					make_and_send_output_command(devicename,"SR",0,vals);
         				} else if (strcmp(command.c_str(),"SR")==0) {
         					if (sendingImage) {
-        						make_and_send_output_command(devicename,command,uuherrors::ctr_busy,emptyvs);
+        						make_and_send_output_command(devicename,command,ummherrors::ctr_busy,emptyvs);
         					}
         					roiX_B = atoi(vals.at(0).c_str());
         					roiY_B = atoi(vals.at(1).c_str());
@@ -644,16 +644,16 @@ int main(void)
         				} else if (strcmp(command.c_str(),"TT")==0) {
         					make_and_send_output_command(devicename,command,0,vals);
         				} else {
-        					make_and_send_output_command(devicename,command,uuherrors::ctr_device_command_not_recognized,emptyvs);
+        					make_and_send_output_command(devicename,command,ummherrors::ctr_device_command_not_recognized,emptyvs);
         				}
         			}
 	        		else {
-	        			make_and_send_output_command(devicename,command,uuherrors::ctr_device_not_recognized,emptyvs);
+	        			make_and_send_output_command(devicename,command,ummherrors::ctr_device_not_recognized,emptyvs);
 	        		}
 	        	} else {
 	        		devicename = string("Controller");
 	        		command = string("ERR");
-	        		make_and_send_output_command(devicename,command,uuherrors::ctr_string_not_recognized,emptyvs);
+	        		make_and_send_output_command(devicename,command,ummherrors::ctr_string_not_recognized,emptyvs);
 	        	}
 	        }
 	    }
