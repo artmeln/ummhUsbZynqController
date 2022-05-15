@@ -8,6 +8,6 @@ The hardware used in this project was the Z-turn board (Xilinx Zynq-7010). It sh
 
 Once you have built your application, you can copy the generated BOOT.BIN file to your SD card (make sure that SD card is the boot mode for your board). Also include devices.txt file from this project as it contains descriptions of implemented devices and, after booting, your application will attempt to read this file.
 
-Connect your board’s USB OTG port to a computer and run Micro-Manager-2.0. Go through the usual hardware configuration and choose UniversalMMHubUsb as the device, then enable devices you want to test among the peripherals. This project does not implement control of any physical devices, it only illustrates principals of communication used by UniversalMMHubUsb adapter.
+Connect your board’s USB OTG port to a computer and make sure your USB device is using the Winusb driver (this can be done by downloading and running Zadig). Next, run  Micro-Manager-2.0 and go through the usual hardware configuration choosing UniversalMMHubUsb as the device and selecting devices you want to test among the peripherals. This project does not implement control of any physical devices, it only illustrates principals of communication used by UniversalMMHubUsb adapter.
 
 For troubleshooting purposes, you can use the UART port on your board. All communications happening over USB2 will be duplicated there along with any error messages.
